@@ -8,12 +8,11 @@ import random
 ## of that quality and 1 indicating very little of that quality.
 
 user_input = input("How many human qualities would you like to look at?")
-if not(user_input.isdigit()):
+while not(user_input.isdigit()):
     user_input = input("Please enter a whole number value:")
-if int(user_input) > 10:
-    user_input = input("Please enter a value less than or equal to 10:")
-if int(user_input) <= 0:
-    user_input = input("Please enter a value greater than 0:")
+if user_input.isdigit():
+    while int(user_input) > 10 or int(user_input) <= 0:
+        user_input = input("Please enter a value less than or equal to 10 and greater than 0:")
 number_qualities = int(user_input)
 
 list_of_qualities = ["Humor","Empathy","Intelligence","Extroversion","Athleticism","Honesty","Confidence","Aggressiveness","Selfishness","Wealth"]
@@ -21,6 +20,7 @@ text = "The human qualities that will be represented by each vector are: "
 for word in list_of_qualities[:(number_qualities-1)]:
     text += word
     text += ", "
+text += list_of_qualities[number_qualities-1]
 print(text)
 
 ## Note that this is a list of vectors, not a matrix.
@@ -94,12 +94,13 @@ def calculate_score(recommended):
     return score
 
 ## If the human fits a certain criteria, then recommend them to the user.
+threshold = 0.3
 def generate_recs(matrix):
     recommendations = []
     while len(recommendations) < 10:
         for human in matrix:
             score = calculate_score(human)
-            if score <= 0.5:
+            if score <= threshold:
                 recommendations.append(human)
                 matrix.remove(human)
     return recommendations
@@ -116,11 +117,12 @@ def give_recs(matrix):
             M_dislike.append(random_human)
         else:
             user_input = input("Respond with Yes or No:")
+    user_input = input("Do you want to see more humans? Yes or No:")
+    while user_input in yes_answers:
+        give_recs(generate_recs(list_of_humans))
+    if user_input in no_answers:
+        print("Here is your 'ideal' candidate:", mean_vector(M_like))
+    else: 
+        user_input = input("Respond with Yes or No:")
 
-user_input = input("Do you want to see more humans? Yes or No:")
-while user_input in yes_answers:
-    give_recs(recommendations)
-if user_input in no_answers:
-    print("Here is your 'ideal' candidate:", mean_vector(M_like))
-else: 
-    user_input = input("Respond with Yes or No:")
+give_recs(recommendations)
