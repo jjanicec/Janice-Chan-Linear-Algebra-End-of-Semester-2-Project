@@ -21,16 +21,19 @@ for word in list_of_qualities[:(number_qualities-1)]:
 text += list_of_qualities[number_qualities-1]
 print(text)
 
-## Generate a large set of real n vectors, and each vector represents a human
+## Generate a large set of real n vectors, and each vector represents a human.
 ## Note that this is a list of vectors, not a matrix.
 list_of_humans = []
-for i in range(300):
+for i in range(500):
     human = []
     for j in range(number_qualities):
         ## Each quality is measuerd on a Likert scale from 1 to 5, with 5 indicating a lot
         ## of that quality and 1 indicating very little of that quality.
         human.append(random.randint(1,5)) ## This adds a random score for each quality for each human.
     list_of_humans.append(human)
+
+## Make a copy of the list of humans as to not interfere with the original list.
+list_copy = list_of_humans.copy()
 
 ## Make matrices to store the human vectors in, based on user input.
 M_like = []
@@ -41,18 +44,20 @@ yes_answers = ["yes","YES","Yes","y"]
 no_answers = ["no","NO","No","n"]
 
 ## Initially, generate random vectors for the user to vote on. 
-## We will gather data to make recomendations.
+## We will gather data to make recommendations.
 while len(M_dislike) < 5 or len(M_like) < 5:
     for candidate_trial_0 in range(5):
-        random_human = list_of_humans[random.randint(0,(len(list_of_humans)-1))]
+        if not list_copy: ## Although the list of humans should not be empty, this code is here to catch it just in case.
+            break
+        random_human = list_copy[random.randint(0,(len(list_copy)-1))] ## Generate a random vector from the list and show it to the user.
         print(random_human)
         user_input = input("Do you like them? Yes or No:")
         if user_input in yes_answers:
             M_like.append(random_human) ## If the user likes a human/vector, add them to the "like" matrix.
-            list_of_humans.remove(random_human) ## After each human is shown to the user, it is removed so it is not recommended again.
+            list_copy.remove(random_human) ## After each human is shown to the user, it is removed. This should ensure that it is not recommended again.
         elif user_input in no_answers:
             M_dislike.append(random_human)
-            list_of_humans.remove(random_human)
+            list_copy.remove(random_human)
         else:
             user_input = input("Respond with Yes or No:")
 
@@ -88,50 +93,75 @@ def orth_distance(vector, mean, line):
     orth_dist = np.linalg.norm(orth) ## Find the magnitude of the orthogonal component to find the orthogonal distance.
     return orth_dist
 
-mean_vector_like = mean_vector(M_like)
-mean_vector_dislike = mean_vector(M_dislike)
+mean_vector_like = np.array(mean_vector(M_like))
+mean_vector_dislike = np.array(mean_vector(M_dislike))
 
 def calculate_score(recommended):
     distance_like = orth_distance(recommended, mean_vector_like, lin_reg(M_like))
     distance_dislike = orth_distance(recommended, mean_vector_dislike, lin_reg(M_dislike))
-    score = distance_like / distance_dislike ## This formula for the score is kept simple for the sake of interpretation.
+    if distance_dislike==0:
+        score = 100 ## This checks for the case where the denominator for score is 0. Make the score some arbitrarily large number bigger than the threshold.
+    else:
+        score = distance_like / distance_dislike ## This formula for the score is kept simple for the sake of interpretation.
     ## A score less than 1 indicates that the recommended vector is closer to 
     ## the line for "like" than to the line for "dislike," which is what we want in a recommendation.
     return score
 
 ## If the human fits a certain criteria, then recommend them to the user.
-threshold = 0.3
+## Here, the threshold is set to 0.5 in an attempt not to be too restricting or lenient,
+## but it can be adjusted.
+threshold = 0.5
+
+shown_humans = []
+
 def generate_recs(matrix):
+    global shown_humans
     recommendations = []
-    while len(recommendations) < 10:
-        for human in matrix:
-            score = calculate_score(human)
-            if score <= threshold:
-                recommendations.append(human)
-                matrix.remove(human)
+    available_humans = [h for h in matrix if h not in shown_humans] ## This is to ensure vectors already recommended are not recommended again.
+    scored_humans = [] ## This is to keep track of which vectors have been shown, so that the same vector/human is not recommended more than once.
+    for human in available_humans: ## Calculate scores for all remaining humans.
+        score = calculate_score(human)
+        scored_humans.append((human,score))
+    scored_humans.sort(key=lambda x: x[1]) ## Sort by score (lowest first, i.e. most liked).
+    for human, score in scored_humans[:5]: ## This takes the first 5 with the highest scores.
+        if score <= threshold:
+            recommendations.append(human)
+            shown_humans.append(human)
     return recommendations
-## Generate a list of vectors suitable to recommend to the user.
+## Generate a list of vectors suitable to initially recommend to the user.
 recommendations = generate_recs(list_of_humans)
 
 ## Give recommendations, built from data collected from the user's responses.
 def give_recs(matrix):
+    global M_like, M_dislike, mean_vector_like, mean_vector_dislike
+    if not matrix: ## This is in the case that there are no recommendations. Ideally, the program would keep recommending random vectors.
+        print("No more recommendations available.")
+        return
     for human in matrix:
         print(human)
-        user_input = input("Do you like them? Yes or No:")
+        user_input = input("Do you like them? Yes or No: ")
         if user_input in yes_answers:
             M_like.append(human)
+            mean_vector_like = np.array(mean_vector(M_like)) ## Update the mean vector based on the new vector added.
         elif user_input in no_answers:
-            M_dislike.append(random_human)
+            M_dislike.append(human)
+            mean_vector_dislike = np.array(mean_vector(M_dislike))
         else:
-            user_input = input("Respond with Yes or No:")
-    user_input = input("Do you want to see more humans? Yes or No:")
-    ## for some reason does not work (takes too long to load?)
-    while user_input in yes_answers:
+            user_input = input("Respond with Yes or No: ")
+    user_input = input("Do you want to see more humans? Yes or No: ")
+    while user_input in yes_answers: ## This loop allows the user to keep looking at recommendations.
         new_recs_matrix = generate_recs(list_of_humans)
+        if not new_recs_matrix: ## This is in the case that we don't get any recommendations. Ideally, the program would keep recommending random vectors.
+            print("No more suitable recommendations available.")
+            break
         give_recs(new_recs_matrix)
+        return
     if user_input in no_answers:
-        print("Here is your 'ideal' candidate:", mean_vector(M_like))
-    else: 
-        user_input = input("Respond with Yes or No:")
-
-give_recs(recommendations)
+        print("Here is your 'ideal' candidate:", mean_vector_like)
+    else:
+        user_input = input("Respond with Yes or No: ")
+if recommendations:
+    give_recs(recommendations)
+else:
+    print("No recommendations found. Try rating more candidates.") ## This is in the case that we don't have any recommendations. Ideally, the program would keep recommending random vectors.
+    print("Here is your 'ideal' candidate:", mean_vector_like)
