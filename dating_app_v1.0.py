@@ -64,8 +64,10 @@ while len(M_dislike) < 5 or len(M_like) < 5:
 ## The idea is that for qualities the user does not care about, they should be random, 
 ## and the qualities the user does care about should follow a pattern.
 
-## The technique we will use is finding the principle eigenvector of the covariance matrix. 
-## [explain principle eigenvector]
+## The technique we will use is principle component analysis (PCA)
+## to find the principle eigenvector of the covariance matrix. 
+## The principle eigenvector is where the most variance is, so identifying
+## the principle eigenvector will locate the pattern in the data.
 ## We will mean-center the data as well.
 def mean_vector(matrix):
     mean_vect = np.mean(matrix, axis = 0)
@@ -75,12 +77,15 @@ def lin_reg(matrix):
     mean = mean_vector(matrix)
     centered = matrix - mean
     n = len(matrix)
-    covariance_matrix = np.matmul(centered.T, centered) / (n - 1) ## Calculate the covariance matrix.
-    eigenvalues, eigenvectors = np.linalg.eig(covariance_matrix) ## Retrieve eigenvalues and eigenvectors.
+    covariance_matrix = np.matmul(centered.T, centered) / (n - 1) ## Compute the covariance matrix.
+    eigenvalues, eigenvectors = np.linalg.eig(covariance_matrix) ## Perform eigendecomposition.
     max_index = np.argmax(eigenvalues) ## Find the index of the max eigenvalue.
     line = eigenvectors[:, max_index] ## Retrieve the principle eigenvector.
     line = line / np.linalg.norm(line) ## Normalize the principle eigenvector.
-    return line
+    return line ## A disadvantage to this approach is that we are assuming a linear pattern, but in the context
+                ## of a dating app, we are assuming the user is looking for specific criteria for specific qualities.
+                ## Since we are also only looking at the principle eigenvector, we are not capturing all the variance
+                ## in the data, only the amount captured by the principle eigenvalue.
 
 ## Calculate the distance between the vector the program is to recommend and the
 ## line for like and dislike vectors (which we found using principle eigenvectors). 

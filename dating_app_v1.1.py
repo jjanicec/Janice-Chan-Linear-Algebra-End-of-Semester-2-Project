@@ -64,53 +64,74 @@ while len(M_dislike) < 5 or len(M_like) < 5:
 ## The idea is that for qualities the user does not care about, they should be random, 
 ## and the qualities the user does care about should follow a pattern.
 
-## The technique we will use is finding the principle eigenvector of the covariance matrix. 
-## [explain principle eigenvector]
-## We will mean-center the data as well.
 def mean_vector(matrix):
     mean_vect = np.mean(matrix, axis = 0)
     return mean_vect
 
-def lin_reg(matrix):
-    mean = mean_vector(matrix)
-    centered = matrix - mean
-    n = len(matrix)
-    covariance_matrix = np.matmul(centered.T, centered) / (n - 1) ## Calculate the covariance matrix.
-    eigenvalues, eigenvectors = np.linalg.eig(covariance_matrix) ## Retrieve eigenvalues and eigenvectors.
-    max_index = np.argmax(eigenvalues) ## Find the index of the max eigenvalue.
-    line = eigenvectors[:, max_index] ## Retrieve the principle eigenvector.
-    line = line / np.linalg.norm(line) ## Normalize the principle eigenvector.
-    return line
-
-## Calculate the distance between the vector the program is to recommend and the
-## line for like and dislike vectors (which we found using principle eigenvectors). 
-## Then calculate a "score" based on those distances.
-def orth_distance(vector, mean, line):
-    vector = np.array(vector)
-    line = np.array(line)
-    projection = mean + np.dot(vector - mean, line) * line ## This uses the formula for projection.
-    orth = vector - projection
-    orth_dist = np.linalg.norm(orth) ## Find the magnitude of the orthogonal component to find the orthogonal distance.
-    return orth_dist
-
 mean_vector_like = np.array(mean_vector(M_like))
 mean_vector_dislike = np.array(mean_vector(M_dislike))
 
-def calculate_score(recommended):
-    distance_like = orth_distance(recommended, mean_vector_like, lin_reg(M_like))
-    distance_dislike = orth_distance(recommended, mean_vector_dislike, lin_reg(M_dislike))
-    if distance_dislike==0:
+## In Version 1.1 of this program, we will look at a different way to calculate score.
+## This method will take distances to a sample of the closest liked and disliked vectors
+## and compare those distances to calculate the score. "k" is the number of neighbors we look at.
+## Using PCA techniques, we are also giving weights to the distances, based on if they are closer or farther.
+## The advantage of this approach is that it does not assume a linear pattern in the data for the "like" and "dislike" matrices.
+def calculate_score(recommended, k=3):
+    vec = np.array(recommended)
+    all_data = np.array(M_like + M_dislike)
+    mean_all = np.mean(all_data, axis=0) ## Calculate the mean of each quality.
+    centered_data = all_data - mean_all ## Mean-center the data.
+    covariance_matrix = np.cov(centered_data.T) ## Compute the covariance matrix.
+    eigenvalues, eigenvectors = np.linalg.eig(covariance_matrix) ## Perform eigendecomposition.
+    index = eigenvalues.argsort()[::-1]
+    eigenvalues = eigenvalues[index] ## Here, we are reordering the eigenvalues (largest to smallest), and eigenvectors to match.
+    eigenvectors = eigenvectors[:, index]
+    M_like_PCA = [np.matmul((np.array(like) - mean_all), eigenvectors) for like in M_like]
+    M_dislike_PCA = [np.matmul((np.array(dislike) - mean_all), eigenvectors) for dislike in M_dislike]
+    vec_PCA = np.matmul((vec - mean_all), eigenvectors) ## Project all data points onto the new space defined by the eigenvectors.
+    variance_weights = eigenvalues / np.sum(eigenvalues) ## Normalize the eigenvalues to determine their importance (i.e. how much of the variance each eigenvalue captures).
+    ## Above is all of the setup for PCA analysis. Below is calculating weighted score.
+    weighted_score = 0
+    all_neighbors = []
+    for like_PCA in M_like_PCA:
+        difference = vec_PCA - like_PCA ## Calculate the distance between the vector to be recommended and the training sample.
+        weigthed_distance = np.sqrt(np.sum(variance_weights * difference**2)) ## Each dimension is weighted differently.
+        all_neighbors.append((weigthed_distance, 'like'))
+    for dislike_PCA in M_dislike_PCA:
+        difference = vec_PCA - dislike_PCA
+        weigthed_distance = np.sqrt(np.sum(variance_weights * difference**2))
+        all_neighbors.append((weigthed_distance, 'dislike'))
+    all_neighbors.sort(key=lambda x: x[0])
+    for distance, label in all_neighbors[:k]: ## Take the nearest k vectors and
+        weight = 1 / (distance + 1e-10) ## based on if they are "like" or "dislike" vectors, calculate the score using weighted distances.
+        if label == 'like':
+            weighted_score -= weight
+        if label == 'dislike':
+            weighted_score += weight
+    return weighted_score ## A more negative score indicates a better recommendation.
+
+## This is a function that uses unweighted distances.
+## This function is not called anywhere later in the program, but is here for reference.
+def calculate_score_simple(recommended, k=3):
+    vec = np.array(recommended)
+    like_distances = [np.linalg.norm(vec-np.array(like)) for like in M_like]
+    dislike_distances = [np.linalg.norm(vec-np.array(dislike)) for dislike in M_dislike]
+    like_distances.sort()
+    dislike_distances.sort()
+    avg_like_distance = np.mean(like_distances[:k])
+    avg_dislike_distance = np.mean(dislike_distances[:k])
+    if avg_dislike_distance==0:
         score = 100 ## This checks for the case where the denominator for score is 0. Make the score some arbitrarily large number bigger than the threshold.
     else:
-        score = distance_like / distance_dislike ## This formula for the score is kept simple for the sake of interpretation.
-    ## A score less than 1 indicates that the recommended vector is closer to 
-    ## the line for "like" than to the line for "dislike," which is what we want in a recommendation.
+        score = avg_like_distance / avg_dislike_distance ## This formula for the score is kept simple for the sake of interpretation.
+    ## A score less than 1 indicates that the recommended vector is closer to the closest neighboring "like" vectors
+    ## than to closest neighboring "dislike" vectors, which is what we want in a recommendation.
     return score
 
 ## If the human fits a certain criteria, then recommend them to the user.
-## Here, the threshold is set to 0.5 in an attempt not to be too restricting or lenient,
+## Here, the threshold is set to -1.0 in an attempt not to be too restricting or lenient,
 ## but it can be adjusted.
-threshold = 0.5
+threshold = -1.0
 
 shown_humans = []
 
