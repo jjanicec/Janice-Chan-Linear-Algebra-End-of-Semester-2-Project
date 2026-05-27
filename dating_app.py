@@ -114,6 +114,31 @@ threshold = 0.5
 
 shown_humans = []
 
+## This function will be helpful in the case that the program runs out of recommendations to give the user.
+## Later in this program, we will see that this function will give the user more random vectors to gather more data.
+def collect_more_data(num_samples=5):
+    global M_like, M_dislike, mean_vector_like, mean_vector_dislike, shown_humans
+    available = [h for h in list_of_humans if h not in shown_humans]
+    if not available:
+        print("No more available humans to show!")
+        return False
+    samples_to_show = min(num_samples, len(available))
+    for i in range(samples_to_show):
+        if not available:
+            break
+        random_human = available[random.randint(0,(len(list_copy)-1))]
+        available.remove(random_human)
+        shown_humans.append(random_human)
+        print(random_human)
+        user_input = input("Do you like them? Yes or No:")
+        if user_input in yes_answers:
+            M_like.append(random_human)
+        elif user_input in no_answers:
+            M_dislike.append(random_human)
+        else:
+            user_input = input("Respond with Yes or No:")
+    return True
+
 def generate_recs(matrix):
     global shown_humans
     recommendations = []
@@ -134,9 +159,18 @@ recommendations = generate_recs(list_of_humans)
 ## Give recommendations, built from data collected from the user's responses.
 def give_recs(matrix):
     global M_like, M_dislike, mean_vector_like, mean_vector_dislike
-    if not matrix: ## This is in the case that there are no recommendations. Ideally, the program would keep recommending random vectors.
-        print("No more recommendations available.")
-        return
+    if not matrix: ## This is in the case that there are no recommendations. The program keeps recommending random vectors.
+        print("No more recommendations available. Try looking at more humans: ")
+        if collect_more_data(5):
+            matrix = generate_recs(list_of_humans)
+            if not matrix:
+                print("Sorry. There are still no recommendations found. How picky are you?")
+                print("Here is your 'idea' candidate: ", mean_vector_like)
+                return
+        else:
+            print("Sorry. There's no more data to collect.")
+            print("Here is your 'idea' candidate: ", mean_vector_like)
+            return
     for human in matrix:
         print(human)
         user_input = input("Do you like them? Yes or No: ")
@@ -151,17 +185,38 @@ def give_recs(matrix):
     user_input = input("Do you want to see more humans? Yes or No: ")
     while user_input in yes_answers: ## This loop allows the user to keep looking at recommendations.
         new_recs_matrix = generate_recs(list_of_humans)
-        if not new_recs_matrix: ## This is in the case that we don't get any recommendations. Ideally, the program would keep recommending random vectors.
-            print("No more suitable recommendations available.")
-            break
+        if not new_recs_matrix: ## This is in the case that we don't get any recommendations. The program keeps recommending random vectors.
+            print("No more suitable recommendations available. Try looking at more humans: ")
+            if collect_more_data(5):
+                new_recs_matrix = generate_recs(list_of_humans)
+                if not new_recs_matrix:
+                    print("Sorry. There are still no recommendations found. How picky are you?")
+                    print("Here is your 'idea' candidate: ", mean_vector_like)
+                    return
+            else:
+                print("Sorry. There's no more data to collect.")
+                print("Here is your 'idea' candidate: ", mean_vector_like)
+                return
         give_recs(new_recs_matrix)
         return
     if user_input in no_answers:
-        print("Here is your 'ideal' candidate:", mean_vector_like)
+        print("Here is your 'ideal' candidate: ", mean_vector_like)
     else:
         user_input = input("Respond with Yes or No: ")
+
+## If there are recommendations to give, call the functions. This block of code also
+## gives random vectors in the cases that there are no more recommendations.
 if recommendations:
     give_recs(recommendations)
 else:
     print("No recommendations found. Try rating more candidates.") ## This is in the case that we don't have any recommendations. Ideally, the program would keep recommending random vectors.
-    print("Here is your 'ideal' candidate:", mean_vector_like)
+    if collect_more_data(10):
+        recommendations = generate_recs(list_of_humans)
+        if recommendations:
+            give_recs(recommendations)
+        else:
+            print("Sorry. There are still no recommendations found. How picky are you?")
+            print("Here is your 'idea' candidate: ", mean_vector_like)
+    else:
+        print("Sorry. There's no more data to collect.")
+        print("Here is your 'ideal' candidate: ", mean_vector_like)
