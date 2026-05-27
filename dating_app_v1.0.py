@@ -64,10 +64,7 @@ while len(M_dislike) < 5 or len(M_like) < 5:
 ## The idea is that for qualities the user does not care about, they should be random, 
 ## and the qualities the user does care about should follow a pattern.
 
-## The technique we will use in this version of the program is principal component analysis (PCA)
-## to find the principal eigenvector of the covariance matrix. 
-## Along the principal eigenvector is where the most variance is, so identifying
-## the principal eigenvector will locate the pattern in the data.
+## The technique we will use in this version of the program is principal component analysis (PCA).
 
 def mean_vector(matrix):
     mean_vect = np.mean(matrix, axis = 0)
@@ -76,21 +73,18 @@ def mean_vector(matrix):
 ## Apply our PCA approach to the recommendation model.
 def generate_line(matrix):
     mean = mean_vector(matrix)
-    centered = matrix - mean ## We will mean-center the data.
+    centered = matrix - mean ## First, mean-center the data.
     n = len(matrix)
     covariance_matrix = np.matmul(centered.T, centered) / (n - 1) ## Compute the covariance matrix.
     eigenvalues, eigenvectors = np.linalg.eig(covariance_matrix) ## Find the eigenvalues and eigenvectors of the covariance matrix.
     max_index = np.argmax(eigenvalues) ## Find the index of the max eigenvalue.
     line = eigenvectors[:, max_index] ## Retrieve the principal eigenvector.
     line = line / np.linalg.norm(line) ## Normalize the principal eigenvector.
-    return line ## A disadvantage to this approach is that we are assuming a linear pattern.
-                ## Since we are also only looking at the first principal eigenvalue-eigenvector pair, we are not capturing all the variance
-                ## in the data, only the amount captured by that eigenvalue.
-
-## Calculate the orthogonal distance between the vector the program is to recommend and the
-## line for like and dislike vectors (which we found using principal eigenvectors). 
-## Then calculate a "score" based on those distances. We will then look at the score of each human
+    return line
+ 
+## Calculate a "score" for each human. We will then look at the score of each human
 ## to determine if they should be recommended to the user.
+
 def orth_distance(vector, mean, line):
     vector = np.array(vector)
     line = np.array(line)
@@ -108,15 +102,11 @@ def calculate_score(recommended):
     if distance_dislike==0:
         score = 100 ## This checks for the case where the denominator for score is 0. Make the score some arbitrarily large number bigger than the threshold.
     else:
-        score = distance_like / distance_dislike ## This formula for the score is kept simple for the sake of interpretation.
-    ## A score less than 1 indicates that the recommended vector is closer to 
-    ## the line for "like" than to the line for "dislike," which is what we want in a recommendation.
+        score = distance_like / distance_dislike
     return score
 
 ## If the human fits a certain criteria, then recommend them to the user.
-## Here, the threshold is set to 0.5 (humans with a score less than or equal to 0.5 will be recommended) 
-## in an attempt not to be too restricting or lenient, but it can be adjusted to 
-## provide a greater quality of recommendations, or a greater quantity of recommendations.
+## Here, the threshold is set to 0.5 in an attempt not to be too restricting or lenient, but it can be adjusted.
 threshold = 0.5
 
 shown_humans = []
