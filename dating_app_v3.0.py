@@ -64,22 +64,24 @@ while len(M_dislike) < 5 or len(M_like) < 5:
 ## The idea is that for qualities the user does not care about, they should be random, 
 ## and the qualities the user does care about should follow a pattern.
 
-## The technique we will use is finding the principle eigenvector of the covariance matrix. 
-## [explain principle eigenvector]
-## We will mean-center the data as well.
+## The technique we will use is finding a least-squares linear regression model for the data.
 def mean_vector(matrix):
     mean_vect = np.mean(matrix, axis = 0)
     return mean_vect
 
-def lin_reg(matrix):
-    mean = mean_vector(matrix)
-    centered = matrix - mean
-    n = len(matrix)
-    covariance_matrix = np.matmul(centered.T, centered) / (n - 1) ## Calculate the covariance matrix.
-    eigenvalues, eigenvectors = np.linalg.eig(covariance_matrix) ## Retrieve eigenvalues and eigenvectors.
-    max_index = np.argmax(eigenvalues) ## Find the index of the max eigenvalue.
-    line = eigenvectors[:, max_index] ## Retrieve the principle eigenvector.
-    line = line / np.linalg.norm(line) ## Normalize the principle eigenvector.
+## The advantage of this approach, compared to the approach in Version 1.0,
+## is that this maximizes the gap between the two groups.
+def lin_reg():
+    X = np.vstack([M_like, M_dislike]) ## Generate a matrix that combines the data from both matrices.
+    y = np.array([1] * len(M_like) + [0] * len(M_dislike)) ## For the sake of our linear regression, our target will be a matrix where 1's represent "like" vectors and 0's represent "dislike" vectors.
+    X_with_intercept = np.column_stack([np.ones(len(X)), X]) ## Add a column of ones to the matrix that contains all the data points.
+    ## Below is the code for computing the coefficients for the least-squares regression line using the linear algebraic formula.
+    XTX = np.matmul(X_with_intercept.T, X_with_intercept)
+    XTy = np.matmul(X_with_intercept.T, y)
+    XTX_inv = np.linalg.inv(XTX)
+    coefficients = np.matmul(XTX_inv, XTy)
+    line = coefficients[1:] ## Extract the coefficient for each quality.
+    line = line / np.linalg.norm(line) ## Normalize the line.
     return line
 
 ## Calculate the distance between the vector the program is to recommend and the
@@ -97,20 +99,26 @@ mean_vector_like = np.array(mean_vector(M_like))
 mean_vector_dislike = np.array(mean_vector(M_dislike))
 
 def calculate_score(recommended):
-    distance_like = orth_distance(recommended, mean_vector_like, lin_reg(M_like))
-    distance_dislike = orth_distance(recommended, mean_vector_dislike, lin_reg(M_dislike))
-    if distance_dislike==0:
+    line = lin_reg()
+    coord = np.dot(recommended, line) ## Use dot product to mimic projection onto the line to get a 1D coordinate (i.e. where is this human on the line).
+    coord_like_clusters =  [np.dot(h, line) for h in M_like] if M_like else [coord] 
+    coord_dislike_clusters = [np.dot(h, line) for h in M_dislike] if M_dislike else [coord]
+    mean_like_coord = np.mean(coord_like_clusters) ## This gives you the average coordinates for the "liked" vectors.
+    mean_dislike_coord = np.mean(coord_dislike_clusters)
+    distance_like = abs(coord - mean_like_coord) ## Since we used dot products earlier to get 1D coordinates, we can easily compare these 1D coordinates.
+    distance_dislike = abs(coord - mean_dislike_coord)
+    if distance_dislike == 0:
         score = 100 ## This checks for the case where the denominator for score is 0. Make the score some arbitrarily large number bigger than the threshold.
     else:
-        score = distance_like / distance_dislike ## This formula for the score is kept simple for the sake of interpretation.
+        score = distance_like / distance_dislike
     ## A score less than 1 indicates that the recommended vector is closer to 
     ## the line for "like" than to the line for "dislike," which is what we want in a recommendation.
     return score
 
 ## If the human fits a certain criteria, then recommend them to the user.
-## Here, the threshold is set to 0.5 in an attempt not to be too restricting or lenient,
+## Here, the threshold is set to 0.7 in an attempt not to be too restricting or lenient,
 ## but it can be adjusted.
-threshold = 0.5
+threshold = 0.7
 
 shown_humans = []
 
@@ -140,7 +148,7 @@ def collect_more_data(num_samples=5):
     return True
 
 def generate_recs(matrix):
-    global shown_humans
+    global shown_humans, threshold
     recommendations = []
     available_humans = [h for h in matrix if h not in shown_humans] ## This is to ensure vectors already recommended are not recommended again.
     scored_humans = [] ## This is to keep track of which vectors have been shown, so that the same vector/human is not recommended more than once.
