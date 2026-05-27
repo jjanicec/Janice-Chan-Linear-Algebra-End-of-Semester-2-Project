@@ -71,21 +71,25 @@ def mean_vector(matrix):
 mean_vector_like = np.array(mean_vector(M_like))
 mean_vector_dislike = np.array(mean_vector(M_dislike))
 
-## In Version 1.1 of this program, we will look at a different way to calculate score.
-## This method will take distances to a sample of the closest liked and disliked vectors
-## and compare those distances to calculate the score. "k" is the number of neighbors we look at.
-## Using PCA techniques, we are also giving weights to the distances, based on if they are closer or farther.
+## In Version 2.0 of this program, we will look at a different way to calculate score.
+## This method will take distances to a sample of the closest vectors, weight the distances, and adjust the score
+## depending on if each neighboring vector is in the matrix for "liked" vectors or the matrix for "disliked" vectors.
+## Then we compare those distances to calculate the score. "k" is the number of neighbors we look at.
+## To give weights to the distances, we will use principal component analysis (PCA).
+## Closer vectors should have greater weights.
+
 ## The advantage of this approach is that it does not assume a linear pattern in the data for the "like" and "dislike" matrices.
+
 def calculate_score(recommended, k=3):
     vec = np.array(recommended)
-    all_data = np.array(M_like + M_dislike)
+    all_data = np.array(M_like + M_dislike) ## Combine the data from both matrices.
     mean_all = np.mean(all_data, axis=0) ## Calculate the mean of each quality.
     centered_data = all_data - mean_all ## Mean-center the data.
     covariance_matrix = np.cov(centered_data.T) ## Compute the covariance matrix.
-    eigenvalues, eigenvectors = np.linalg.eig(covariance_matrix) ## Perform eigendecomposition.
-    index = eigenvalues.argsort()[::-1]
-    eigenvalues = eigenvalues[index] ## Here, we are reordering the eigenvalues (largest to smallest), and eigenvectors to match.
-    eigenvectors = eigenvectors[:, index]
+    eigenvalues, eigenvectors = np.linalg.eig(covariance_matrix) ## Find eigenvalues and eigenvectors for the covariance matrix.
+    index = eigenvalues.argsort()[::-1]     ## Here, we are reordering the eigenvalues (largest to smallest),
+    eigenvalues = eigenvalues[index]        ## and eigenvectors to match.
+    eigenvectors = eigenvectors[:, index]   ## The amount of eigenvalues the matrix has is equivalent to the number of qualities.
     M_like_PCA = [np.matmul((np.array(like) - mean_all), eigenvectors) for like in M_like]
     M_dislike_PCA = [np.matmul((np.array(dislike) - mean_all), eigenvectors) for dislike in M_dislike]
     vec_PCA = np.matmul((vec - mean_all), eigenvectors) ## Project all data points onto the new space defined by the eigenvectors.
@@ -95,16 +99,16 @@ def calculate_score(recommended, k=3):
     all_neighbors = []
     for like_PCA in M_like_PCA:
         difference = vec_PCA - like_PCA ## Calculate the distance between the vector to be recommended and the training sample.
-        weigthed_distance = np.sqrt(np.sum(variance_weights * difference**2)) ## Each dimension is weighted differently.
-        all_neighbors.append((weigthed_distance, 'like'))
+        weigthed_distance = np.sqrt(np.sum(variance_weights * difference**2)) ## Each quality is weighted differently.
+        all_neighbors.append((weigthed_distance, 'like')) ## Add the weighted distance and a label (either 'like' or 'dislike') to the list of all neighbors.
     for dislike_PCA in M_dislike_PCA:
         difference = vec_PCA - dislike_PCA
         weigthed_distance = np.sqrt(np.sum(variance_weights * difference**2))
         all_neighbors.append((weigthed_distance, 'dislike'))
-    all_neighbors.sort(key=lambda x: x[0])
+    all_neighbors.sort(key=lambda x: x[0]) ## Sort the list based on weighted distance, from least to greatest.
     for distance, label in all_neighbors[:k]: ## Take the nearest k vectors and
-        weight = 1 / (distance + 1e-10) ## based on if they are "like" or "dislike" vectors, calculate the score using weighted distances.
-        if label == 'like':
+        weight = 1 / (distance + 1e-10)       ## based on if they are "like" or "dislike" vectors,
+        if label == 'like':                   ## calculate the score using weighted distances.
             weighted_score -= weight
         if label == 'dislike':
             weighted_score += weight
@@ -164,12 +168,12 @@ def generate_recs(matrix):
     global shown_humans
     recommendations = []
     available_humans = [h for h in matrix if h not in shown_humans] ## This is to ensure vectors already recommended are not recommended again.
-    scored_humans = [] ## This is to keep track of which vectors have been shown, so that the same vector/human is not recommended more than once.
+    scored_humans = [] 
     for human in available_humans: ## Calculate scores for all remaining humans.
         score = calculate_score(human)
         scored_humans.append((human,score))
     scored_humans.sort(key=lambda x: x[1]) ## Sort by score (lowest first, i.e. most liked).
-    for human, score in scored_humans[:5]: ## This takes the first 5 with the highest scores.
+    for human, score in scored_humans[:5]: ## Look at a few humans at a time so that the user is not stuck in a loop forever.
         if score <= threshold:
             recommendations.append(human)
             shown_humans.append(human)
@@ -230,7 +234,7 @@ def give_recs(matrix):
 if recommendations:
     give_recs(recommendations)
 else:
-    print("No recommendations found. Try rating more candidates.") ## This is in the case that we don't have any recommendations. Ideally, the program would keep recommending random vectors.
+    print("No recommendations found. Try rating more candidates.")
     if collect_more_data(10):
         recommendations = generate_recs(list_of_humans)
         if recommendations:

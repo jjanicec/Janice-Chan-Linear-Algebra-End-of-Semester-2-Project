@@ -64,7 +64,11 @@ while len(M_dislike) < 5 or len(M_like) < 5:
 ## The idea is that for qualities the user does not care about, they should be random, 
 ## and the qualities the user does care about should follow a pattern.
 
-## The technique we will use is finding a least-squares linear regression model for the data.
+## The technique we will use in this version is finding a least-squares linear regression model for the data.
+## The line will be in the form y = AX, where A is the coefficients matrix and X is the matrix with the measured qualities.
+## Another way to represent the line is y = c0 + c1x1 + c2x2 + ... + cnxn where each xi is a human quality and each ci is a constant.
+## For our target y, we will input 1 for "liked" vectors and 0 for "disliked" vectors.
+
 def mean_vector(matrix):
     mean_vect = np.mean(matrix, axis = 0)
     return mean_vect
@@ -72,21 +76,22 @@ def mean_vector(matrix):
 ## The advantage of this approach, compared to the approach in Version 1.0,
 ## is that this maximizes the gap between the two groups.
 def lin_reg():
-    X = np.vstack([M_like, M_dislike]) ## Generate a matrix that combines the data from both matrices.
-    y = np.array([1] * len(M_like) + [0] * len(M_dislike)) ## For the sake of our linear regression, our target will be a matrix where 1's represent "like" vectors and 0's represent "dislike" vectors.
+    X = np.array(M_like + M_dislike) ## Generate a matrix that combines the data from both matrices.
+    y = np.array([1] * len(M_like) + [0] * len(M_dislike)) ## Our target will be a matrix where 1's represent "like" vectors and 0's represent "dislike" vectors.
     X_with_intercept = np.column_stack([np.ones(len(X)), X]) ## Add a column of ones to the matrix that contains all the data points.
-    ## Below is the code for computing the coefficients for the least-squares regression line using the linear algebraic formula.
+    ## Below is the code for computing the matrix of the coefficients for the least-squares regression line using the linear algebraic formula.
     XTX = np.matmul(X_with_intercept.T, X_with_intercept)
     XTy = np.matmul(X_with_intercept.T, y)
     XTX_inv = np.linalg.inv(XTX)
     coefficients = np.matmul(XTX_inv, XTy)
-    line = coefficients[1:] ## Extract the coefficient for each quality.
-    line = line / np.linalg.norm(line) ## Normalize the line.
+    line = coefficients[1:] ## Extract the coefficient for each quality. The first item in the list is the intercept, which is not important because the line is defined by its direction.
+    line = line / np.linalg.norm(line) ## Since we found the direction of the line, we now normalize the line.
     return line
 
 ## Calculate the distance between the vector the program is to recommend and the
 ## line for like and dislike vectors (which we found using principle eigenvectors). 
 ## Then calculate a "score" based on those distances.
+
 def orth_distance(vector, mean, line):
     vector = np.array(vector)
     line = np.array(line)
@@ -100,8 +105,8 @@ mean_vector_dislike = np.array(mean_vector(M_dislike))
 
 def calculate_score(recommended):
     line = lin_reg()
-    coord = np.dot(recommended, line) ## Use dot product to mimic projection onto the line to get a 1D coordinate (i.e. where is this human on the line).
-    coord_like_clusters =  [np.dot(h, line) for h in M_like] if M_like else [coord] 
+    coord = np.dot(recommended, line) ## This uses the projection formula (without multiplying by the unit vector) to get a 1D coordinate along the line.
+    coord_like_clusters =  [np.dot(h, line) for h in M_like] if M_like else [coord] ## Gather the coordinates for the "liked" and "disliked" vectors.
     coord_dislike_clusters = [np.dot(h, line) for h in M_dislike] if M_dislike else [coord]
     mean_like_coord = np.mean(coord_like_clusters) ## This gives you the average coordinates for the "liked" vectors.
     mean_dislike_coord = np.mean(coord_dislike_clusters)
@@ -151,12 +156,12 @@ def generate_recs(matrix):
     global shown_humans, threshold
     recommendations = []
     available_humans = [h for h in matrix if h not in shown_humans] ## This is to ensure vectors already recommended are not recommended again.
-    scored_humans = [] ## This is to keep track of which vectors have been shown, so that the same vector/human is not recommended more than once.
+    scored_humans = []
     for human in available_humans: ## Calculate scores for all remaining humans.
         score = calculate_score(human)
         scored_humans.append((human,score))
     scored_humans.sort(key=lambda x: x[1]) ## Sort by score (lowest first, i.e. most liked).
-    for human, score in scored_humans[:5]: ## This takes the first 5 with the highest scores.
+    for human, score in scored_humans[:5]: ## Look at a few humans at a time so that the user is not stuck in a loop forever.
         if score <= threshold:
             recommendations.append(human)
             shown_humans.append(human)
@@ -217,7 +222,7 @@ def give_recs(matrix):
 if recommendations:
     give_recs(recommendations)
 else:
-    print("No recommendations found. Try rating more candidates.") ## This is in the case that we don't have any recommendations. Ideally, the program would keep recommending random vectors.
+    print("No recommendations found. Try rating more candidates.")
     if collect_more_data(10):
         recommendations = generate_recs(list_of_humans)
         if recommendations:

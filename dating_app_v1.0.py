@@ -64,32 +64,33 @@ while len(M_dislike) < 5 or len(M_like) < 5:
 ## The idea is that for qualities the user does not care about, they should be random, 
 ## and the qualities the user does care about should follow a pattern.
 
-## The technique we will use is principle component analysis (PCA)
-## to find the principle eigenvector of the covariance matrix. 
-## The principle eigenvector is where the most variance is, so identifying
-## the principle eigenvector will locate the pattern in the data.
-## We will mean-center the data as well.
+## The technique we will use in this version of the program is principal component analysis (PCA)
+## to find the principal eigenvector of the covariance matrix. 
+## Along the principal eigenvector is where the most variance is, so identifying
+## the principal eigenvector will locate the pattern in the data.
+
 def mean_vector(matrix):
     mean_vect = np.mean(matrix, axis = 0)
     return mean_vect
 
-def lin_reg(matrix):
+## Apply our PCA approach to the recommendation model.
+def generate_line(matrix):
     mean = mean_vector(matrix)
-    centered = matrix - mean
+    centered = matrix - mean ## We will mean-center the data.
     n = len(matrix)
     covariance_matrix = np.matmul(centered.T, centered) / (n - 1) ## Compute the covariance matrix.
-    eigenvalues, eigenvectors = np.linalg.eig(covariance_matrix) ## Perform eigendecomposition.
+    eigenvalues, eigenvectors = np.linalg.eig(covariance_matrix) ## Find the eigenvalues and eigenvectors of the covariance matrix.
     max_index = np.argmax(eigenvalues) ## Find the index of the max eigenvalue.
-    line = eigenvectors[:, max_index] ## Retrieve the principle eigenvector.
-    line = line / np.linalg.norm(line) ## Normalize the principle eigenvector.
-    return line ## A disadvantage to this approach is that we are assuming a linear pattern, but in the context
-                ## of a dating app, we are assuming the user is looking for specific criteria for specific qualities.
-                ## Since we are also only looking at the principle eigenvector, we are not capturing all the variance
-                ## in the data, only the amount captured by the principle eigenvalue.
+    line = eigenvectors[:, max_index] ## Retrieve the principal eigenvector.
+    line = line / np.linalg.norm(line) ## Normalize the principal eigenvector.
+    return line ## A disadvantage to this approach is that we are assuming a linear pattern.
+                ## Since we are also only looking at the first principal eigenvalue-eigenvector pair, we are not capturing all the variance
+                ## in the data, only the amount captured by that eigenvalue.
 
-## Calculate the distance between the vector the program is to recommend and the
-## line for like and dislike vectors (which we found using principle eigenvectors). 
-## Then calculate a "score" based on those distances.
+## Calculate the orthogonal distance between the vector the program is to recommend and the
+## line for like and dislike vectors (which we found using principal eigenvectors). 
+## Then calculate a "score" based on those distances. We will then look at the score of each human
+## to determine if they should be recommended to the user.
 def orth_distance(vector, mean, line):
     vector = np.array(vector)
     line = np.array(line)
@@ -102,8 +103,8 @@ mean_vector_like = np.array(mean_vector(M_like))
 mean_vector_dislike = np.array(mean_vector(M_dislike))
 
 def calculate_score(recommended):
-    distance_like = orth_distance(recommended, mean_vector_like, lin_reg(M_like))
-    distance_dislike = orth_distance(recommended, mean_vector_dislike, lin_reg(M_dislike))
+    distance_like = orth_distance(recommended, mean_vector_like, generate_line(M_like))
+    distance_dislike = orth_distance(recommended, mean_vector_dislike, generate_line(M_dislike))
     if distance_dislike==0:
         score = 100 ## This checks for the case where the denominator for score is 0. Make the score some arbitrarily large number bigger than the threshold.
     else:
@@ -113,8 +114,9 @@ def calculate_score(recommended):
     return score
 
 ## If the human fits a certain criteria, then recommend them to the user.
-## Here, the threshold is set to 0.5 in an attempt not to be too restricting or lenient,
-## but it can be adjusted.
+## Here, the threshold is set to 0.5 (humans with a score less than or equal to 0.5 will be recommended) 
+## in an attempt not to be too restricting or lenient, but it can be adjusted to 
+## provide a greater quality of recommendations, or a greater quantity of recommendations.
 threshold = 0.5
 
 shown_humans = []
@@ -124,13 +126,11 @@ shown_humans = []
 def collect_more_data(num_samples=5):
     global M_like, M_dislike, mean_vector_like, mean_vector_dislike, shown_humans
     available = [h for h in list_of_humans if h not in shown_humans]
-    if not available:
+    if not available: ## Check if there are available humans to show. In a real-world context, it is unlikely someone on a dating app will have gone through every candidate.
         print("No more available humans to show!")
         return False
     samples_to_show = min(num_samples, len(available))
     for i in range(samples_to_show):
-        if not available:
-            break
         random_human = available[random.randint(0,(len(list_copy)-1))]
         available.remove(random_human)
         shown_humans.append(random_human)
@@ -148,12 +148,12 @@ def generate_recs(matrix):
     global shown_humans
     recommendations = []
     available_humans = [h for h in matrix if h not in shown_humans] ## This is to ensure vectors already recommended are not recommended again.
-    scored_humans = [] ## This is to keep track of which vectors have been shown, so that the same vector/human is not recommended more than once.
+    scored_humans = [] 
     for human in available_humans: ## Calculate scores for all remaining humans.
         score = calculate_score(human)
         scored_humans.append((human,score))
     scored_humans.sort(key=lambda x: x[1]) ## Sort by score (lowest first, i.e. most liked).
-    for human, score in scored_humans[:5]: ## This takes the first 5 with the highest scores.
+    for human, score in scored_humans[:5]: ## Look at a few humans at a time so that the user is not stuck in a loop forever.
         if score <= threshold:
             recommendations.append(human)
             shown_humans.append(human)
@@ -162,6 +162,7 @@ def generate_recs(matrix):
 recommendations = generate_recs(list_of_humans)
 
 ## Give recommendations, built from data collected from the user's responses.
+## The blocks of code below are entirely for the sake of user interaction with the program.
 def give_recs(matrix):
     global M_like, M_dislike, mean_vector_like, mean_vector_dislike
     if not matrix: ## This is in the case that there are no recommendations. The program keeps recommending random vectors.
@@ -169,7 +170,9 @@ def give_recs(matrix):
         if collect_more_data(5):
             matrix = generate_recs(list_of_humans)
             if not matrix:
-                print("Sorry. There are still no recommendations found. How picky are you?")
+                print("Sorry. There are still no recommendations found. How picky are you?") ## This is in the case that even after gathering more data, the program cannot find recommendations.
+                ## One possibility is that the threshold is not appropriate, and thus the program is too picky.
+                ## Another possibility could be that the way the user decides which vectors to say "yes" or "no" to is not compatible with this program.
                 print("Here is your 'idea' candidate: ", mean_vector_like)
                 return
         else:
@@ -214,7 +217,7 @@ def give_recs(matrix):
 if recommendations:
     give_recs(recommendations)
 else:
-    print("No recommendations found. Try rating more candidates.") ## This is in the case that we don't have any recommendations. Ideally, the program would keep recommending random vectors.
+    print("No recommendations found. Try rating more candidates.")
     if collect_more_data(10):
         recommendations = generate_recs(list_of_humans)
         if recommendations:
