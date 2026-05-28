@@ -87,7 +87,7 @@ def calculate_score(recommended, k=3):
     M_like_PCA = [np.matmul((np.array(like) - mean_all), eigenvectors) for like in M_like]
     M_dislike_PCA = [np.matmul((np.array(dislike) - mean_all), eigenvectors) for dislike in M_dislike]
     vec_PCA = np.matmul((vec - mean_all), eigenvectors) ## Project all data points onto the new space defined by the eigenvectors.
-    variance_weights = eigenvalues / np.sum(eigenvalues) ## Normalize the eigenvalues to determine their importance (i.e. how much of the variance each eigenvalue captures).
+    variance_weights = eigenvalues / np.sum(eigenvalues) ## Normalize the eigenvalues.
     ## Above is all of the setup for PCA analysis. Below is calculating weighted score.
     weighted_score = 0
     all_neighbors = []
