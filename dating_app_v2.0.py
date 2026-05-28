@@ -72,13 +72,7 @@ mean_vector_like = np.array(mean_vector(M_like))
 mean_vector_dislike = np.array(mean_vector(M_dislike))
 
 ## In Version 2.0 of this program, we will look at a different way to calculate score.
-## This method will take distances to a sample of the closest vectors, weight the distances, and adjust the score
-## depending on if each neighboring vector is in the matrix for "liked" vectors or the matrix for "disliked" vectors.
-## Then we compare those distances to calculate the score. "k" is the number of neighbors we look at.
-## To give weights to the distances, we will use principal component analysis (PCA).
-## Closer vectors should have greater weights.
-
-## The advantage of this approach is that it does not assume a linear pattern in the data for the "like" and "dislike" matrices.
+## This method will compare weighted distances to neighboring vectors in M_like and M_dislike.
 
 def calculate_score(recommended, k=3):
     vec = np.array(recommended)
@@ -112,7 +106,7 @@ def calculate_score(recommended, k=3):
             weighted_score -= weight
         if label == 'dislike':
             weighted_score += weight
-    return weighted_score ## A more negative score indicates a better recommendation.
+    return weighted_score 
 
 ## This is a function that uses unweighted distances.
 ## This function is not called anywhere later in the program, but is here for reference.
