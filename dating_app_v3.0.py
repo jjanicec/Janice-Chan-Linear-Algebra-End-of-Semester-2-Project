@@ -65,9 +65,6 @@ while len(M_dislike) < 5 or len(M_like) < 5:
 ## and the qualities the user does care about should follow a pattern.
 
 ## The technique we will use in this version is finding a least-squares linear regression model for the data.
-## The line will be in the form y = AX, where A is the coefficients matrix and X is the matrix with the measured qualities.
-## Another way to represent the line is y = c0 + c1x1 + c2x2 + ... + cnxn where each xi is a human quality and each ci is a constant.
-## For our target y, we will input 1 for "liked" vectors and 0 for "disliked" vectors.
 
 def mean_vector(matrix):
     mean_vect = np.mean(matrix, axis = 0)
@@ -84,13 +81,12 @@ def lin_reg():
     XTy = np.matmul(X_with_intercept.T, y)
     XTX_inv = np.linalg.inv(XTX)
     coefficients = np.matmul(XTX_inv, XTy)
-    line = coefficients[1:] ## Extract the coefficient for each quality. The first item in the list is the intercept, which is not important because the line is defined by its direction.
+    line = coefficients[1:] ## Extract the coefficient for each quality.
     line = line / np.linalg.norm(line) ## Since we found the direction of the line, we now normalize the line.
     return line
 
 ## Calculate the distance between the vector the program is to recommend and the
-## line for like and dislike vectors (which we found using principle eigenvectors). 
-## Then calculate a "score" based on those distances.
+## line for like and dislike vectors. Then calculate a "score" based on those distances.
 
 def orth_distance(vector, mean, line):
     vector = np.array(vector)
@@ -105,7 +101,7 @@ mean_vector_dislike = np.array(mean_vector(M_dislike))
 
 def calculate_score(recommended):
     line = lin_reg()
-    coord = np.dot(recommended, line) ## This uses the projection formula (without multiplying by the unit vector) to get a 1D coordinate along the line.
+    coord = np.dot(recommended, line) ## Get a 1D coordinate along the line.
     coord_like_clusters =  [np.dot(h, line) for h in M_like] if M_like else [coord] ## Gather the coordinates for the "liked" and "disliked" vectors.
     coord_dislike_clusters = [np.dot(h, line) for h in M_dislike] if M_dislike else [coord]
     mean_like_coord = np.mean(coord_like_clusters) ## This gives you the average coordinates for the "liked" vectors.
@@ -116,8 +112,6 @@ def calculate_score(recommended):
         score = 100 ## This checks for the case where the denominator for score is 0. Make the score some arbitrarily large number bigger than the threshold.
     else:
         score = distance_like / distance_dislike
-    ## A score less than 1 indicates that the recommended vector is closer to 
-    ## the line for "like" than to the line for "dislike," which is what we want in a recommendation.
     return score
 
 ## If the human fits a certain criteria, then recommend them to the user.
